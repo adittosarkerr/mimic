@@ -135,7 +135,7 @@ async function executeReplay(schema: AutomationSchema, recording: RecordingSessi
 
   // Login credentials: per-run values if given, else stored (encrypted) creds.
   let creds: Credentials | undefined = credentials
-  if (!creds && schema.login && store.hasCredentials(schema.automationId)) {
+  if (!creds && schema.login && (await store.hasCredentials(schema.automationId))) {
     creds = (await store.getCredentials(schema.automationId)) ?? undefined
   }
 
@@ -257,7 +257,7 @@ api.post('/automations/:id/replay-plan', async (req, res) => {
     credentials?: Credentials
   }
   let creds = credentials
-  if (!creds && schema.login && store.hasCredentials(schema.automationId)) {
+  if (!creds && schema.login && (await store.hasCredentials(schema.automationId))) {
     creds = (await store.getCredentials(schema.automationId)) ?? undefined
   }
   const { startUrl, steps, direct, extractScript, waitSelector } = buildReplaySteps(recording, {
@@ -447,8 +447,8 @@ api.get('/runs/:id/snapshot', async (req, res) => {
 
 // --- Login credentials (encrypted at rest; values never returned) ---
 
-api.get('/automations/:id/credentials', (req, res) => {
-  res.json({ hasCredentials: store.hasCredentials(req.params.id) })
+api.get('/automations/:id/credentials', async (req, res) => {
+  res.json({ hasCredentials: await store.hasCredentials(req.params.id) })
 })
 
 api.post('/automations/:id/credentials', async (req, res) => {

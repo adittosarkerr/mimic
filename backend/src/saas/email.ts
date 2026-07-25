@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { readFile, writeFile, mkdir, unlink } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { encryptSecret, decryptSecret } from '../store/crypto.js'
+import { dbEnabled, query } from '../store/db.js'
 
 const DATA_DIR = join(process.cwd(), 'data')
 
@@ -32,24 +33,31 @@ export interface EmailConfig {
   secure: boolean
 }
 
-/** Encrypted per-user email/SMTP config. Never returned in cleartext. */
-export const emailStore = {
-  async save(userId: string, cfg: EmailConfig): Promise<void> {
+interface EmailStore {
+  save(userId: string, cfg: EmailConfig): Promise<void>
+  get(userId: string): Promise<EmailConfig | null>
+  has(userId: string): Promise<boolean>
+  delete(userId: string): Promise<void>
+}
+
+/** Local JSON files — used when no Postgres connection string is configured. */
+const fileEmailStore: EmailStore = {
+  async save(userId, cfg) {
     const dir = join(DATA_DIR, 'email-config')
     await mkdir(dir, { recursive: true })
     await writeFile(join(dir, `${userId}.enc`), encryptSecret(JSON.stringify(cfg)), 'utf8')
   },
-  async get(userId: string): Promise<EmailConfig | null> {
+  async get(userId) {
     try {
       return JSON.parse(decryptSecret(await readFile(join(DATA_DIR, 'email-config', `${userId}.enc`), 'utf8'))) as EmailConfig
     } catch {
       return null
     }
   },
-  has(userId: string): boolean {
+  async has(userId) {
     return existsSync(join(DATA_DIR, 'email-config', `${userId}.enc`))
   },
-  async delete(userId: string): Promise<void> {
+  async delete(userId) {
     try {
       await unlink(join(DATA_DIR, 'email-config', `${userId}.enc`))
     } catch {
@@ -57,6 +65,36 @@ export const emailStore = {
     }
   },
 }
+
+/** Postgres — used in production (Vercel etc.) so configs survive redeploys. */
+const pgEmailStore: EmailStore = {
+  async save(userId, cfg) {
+    const enc = encryptSecret(JSON.stringify(cfg))
+    await query(
+      'INSERT INTO email_configs (user_id, enc) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET enc = $2',
+      [userId, enc],
+    )
+  },
+  async get(userId) {
+    const rows = await query<{ enc: string }>('SELECT enc FROM email_configs WHERE user_id = $1', [userId])
+    if (!rows[0]) return null
+    try {
+      return JSON.parse(decryptSecret(rows[0].enc)) as EmailConfig
+    } catch {
+      return null
+    }
+  },
+  async has(userId) {
+    const rows = await query('SELECT 1 FROM email_configs WHERE user_id = $1', [userId])
+    return rows.length > 0
+  },
+  async delete(userId) {
+    await query('DELETE FROM email_configs WHERE user_id = $1', [userId])
+  },
+}
+
+/** Encrypted per-user email/SMTP config. Never returned in cleartext. */
+export const emailStore: EmailStore = dbEnabled ? pgEmailStore : fileEmailStore
 
 export interface SendResult {
   ok: boolean

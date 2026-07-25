@@ -57,7 +57,19 @@ curl -X POST http://localhost:4545/api/v1/automations/<id>/run \
 
 **Also supported:** star / breakfast / cancellation **filters** (Booking hotels), **currency** change (`selected_currency` on Booking stays + attractions), and generic recorded-step replay + structured result extraction on **any other site**.
 
+## Deploying (Vercel)
+
+This repo has a root `vercel.json` deploying **frontend** (Vite) and **backend** (Express) as two services in one Vercel project. Playwright still needs a real browser and a bit more memory/time than a typical serverless function, so:
+
+1. Import the repo into Vercel (`New Project` → pick this repo). It should detect both services automatically from `vercel.json`.
+2. **Add a database** — Vercel Dashboard → your project → **Storage** → **Create Database** → Postgres → **Connect** to this project. This sets `POSTGRES_URL` automatically; without it, data written on Vercel would vanish on every redeploy (no persistent disk there).
+3. Set **`CRED_ENCRYPTION_KEY`** in Project Settings → Environment Variables (generate with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`). Required once a database is attached — without it, saved login credentials / email configs become undecryptable after any restart.
+4. Optionally set `DEEPSEEK_API_KEY` and `VITE_API_BASE` (defaults to same-origin `/api`, which the rewrites already handle).
+5. Deploy.
+
+Known limits on Vercel specifically: **assisted mode** (a visible browser window for solving a CAPTCHA) can't work there — no display on a server. Headless/stealth replay and all deterministic adapters are unaffected.
+
 ## Notes
 
-- `backend/data/` (recordings, automations, runs) and `.env` are gitignored — they hold local user data and secrets.
+- `backend/data/` (local JSON fallback) and `.env` are gitignored — they hold local dev data and secrets. Once `POSTGRES_URL` is set, all storage (recordings, automations, runs, accounts, sessions, API keys, credentials, marketplace listings, transactions, email configs) moves to Postgres automatically — no code changes needed either way.
 - Billing is dev-bypassed by default (`BILLING_ENABLED=false`): plan changes apply instantly, nothing is charged.

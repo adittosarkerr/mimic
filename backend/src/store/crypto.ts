@@ -6,11 +6,23 @@ const DATA_DIR = join(process.cwd(), 'data')
 const KEY_FILE = join(DATA_DIR, '.cred-key')
 
 /**
- * Local encryption key for credentials at rest. Generated once and stored in a
- * restricted-permission file. This protects stored passwords from casual disk
- * reads — it is NOT a substitute for a real secrets manager in production.
+ * Encryption key for credentials at rest. On a stateless host (Vercel etc.)
+ * there is no persistent disk to keep an auto-generated key file — it would
+ * regenerate on every cold start, silently making everything encrypted under
+ * the OLD key permanently undecryptable even though the ciphertext survives
+ * in Postgres. CRED_ENCRYPTION_KEY (64 hex chars = 32 bytes) must be set in
+ * any such environment. Falls back to a local generated file for convenience
+ * when running on a real persistent disk (local dev, a VPS, etc).
  */
 function getKey(): Buffer {
+  const fromEnv = process.env.CRED_ENCRYPTION_KEY
+  if (fromEnv) {
+    const key = Buffer.from(fromEnv, 'hex')
+    if (key.length !== 32) {
+      throw new Error('CRED_ENCRYPTION_KEY must be 64 hex characters (32 bytes)')
+    }
+    return key
+  }
   if (existsSync(KEY_FILE)) return readFileSync(KEY_FILE)
   mkdirSync(DATA_DIR, { recursive: true })
   const key = randomBytes(32)
