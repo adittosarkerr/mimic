@@ -45,7 +45,7 @@ function Nav() {
             <span className="pill-tag" style={{ fontSize: 10, padding: '2px 8px' }}>{PLAN_NAME[user.plan] ?? user.plan}</span>
           </Link>
         ) : (
-          <Link to="/auth" style={linkStyle(pathname.startsWith('/auth'))}>sign in</Link>
+          <Link to="/auth?mode=register" style={linkStyle(pathname.startsWith('/auth'))}>sign up</Link>
         )}
       </div>
     </nav>

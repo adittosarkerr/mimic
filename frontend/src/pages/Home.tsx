@@ -107,7 +107,8 @@ function HeroCanvas() {
 
 export default function Home() {
   // Signed-in visitors go straight back to their dashboard; new visitors get
-  // sign up (primary) and sign in (for people who already made an account).
+  // one clear CTA (sign up) — sign-in for an existing account is reachable
+  // via the toggle on the signup form itself, not a second hero button.
   const [signedIn] = useState(() => !!auth.token())
 
   return (
@@ -131,22 +132,16 @@ export default function Home() {
                 <button className="btn" style={{ fontSize: 16, padding: '13px 28px' }}>open dashboard</button>
               </Link>
             ) : (
-              <>
-                <Link to="/auth?mode=register">
-                  <button className="btn" style={{ fontSize: 16, padding: '13px 28px' }}>sign up</button>
-                </Link>
-                <Link to="/auth?mode=login">
-                  <button className="btn btn-ghost" style={{ fontSize: 16, padding: '13px 28px' }}>sign in</button>
-                </Link>
-              </>
+              <Link to="/auth?mode=register">
+                <button className="btn" style={{ fontSize: 16, padding: '13px 28px' }}>sign up</button>
+              </Link>
             )}
-            <a href={EXTENSION_DOWNLOAD_URL} download rel="noreferrer">
-              <button className="btn btn-ghost" style={{ fontSize: 16, padding: '13px 28px' }}>get the extension</button>
-            </a>
           </div>
           <p style={{ fontSize: 13, color: 'var(--ink-soft)', marginTop: 14, pointerEvents: 'auto' }}>
-            downloads a zip — unzip it, then <span className="mono">chrome://extensions</span> → Developer mode →
-            Load unpacked → pick the unzipped folder.
+            already have an account? <Link to="/auth?mode=login" style={{ fontWeight: 700 }}>sign in</Link>
+            {' · '}
+            <a href={EXTENSION_DOWNLOAD_URL} download rel="noreferrer" style={{ fontWeight: 700 }}>get the extension</a>
+            {' — downloads a zip, unzip then '}<span className="mono">chrome://extensions</span>{' → Developer mode → Load unpacked → pick the unzipped folder.'}
           </p>
         </div>
       </section>
