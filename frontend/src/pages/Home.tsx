@@ -107,8 +107,8 @@ function HeroCanvas() {
 
 export default function Home() {
   // Signed-in visitors go straight back to their dashboard; new visitors get
-  // one clear CTA (sign up) — sign-in for an existing account is reachable
-  // via the toggle on the signup form itself, not a second hero button.
+  // sign up + get the extension. Sign-in for an existing account lives on the
+  // signup form itself ("already a user? sign in") — not a third hero button.
   const [signedIn] = useState(() => !!auth.token())
 
   return (
@@ -126,7 +126,7 @@ export default function Home() {
             Record any task on any website — searching, booking, posting — and mimic turns it into a reusable
             automation with a simple form. Even across multiple sites.
           </p>
-          <div style={{ marginTop: 32, display: 'flex', gap: 14, flexWrap: 'wrap', pointerEvents: 'auto' }}>
+          <div style={{ marginTop: 32, display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', pointerEvents: 'auto' }}>
             {signedIn ? (
               <Link to="/dashboard">
                 <button className="btn" style={{ fontSize: 16, padding: '13px 28px' }}>open dashboard</button>
@@ -136,12 +136,23 @@ export default function Home() {
                 <button className="btn" style={{ fontSize: 16, padding: '13px 28px' }}>sign up</button>
               </Link>
             )}
+            <a href={EXTENSION_DOWNLOAD_URL} download rel="noreferrer">
+              <button
+                className="btn btn-ghost"
+                style={{ fontSize: 16, padding: '13px 26px', display: 'inline-flex', alignItems: 'center', gap: 9 }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 3v12" />
+                  <path d="M6.5 10.5 12 16l5.5-5.5" />
+                  <path d="M4 19.5h16" />
+                </svg>
+                get the extension
+              </button>
+            </a>
           </div>
           <p style={{ fontSize: 13, color: 'var(--ink-soft)', marginTop: 14, pointerEvents: 'auto' }}>
-            already have an account? <Link to="/auth?mode=login" style={{ fontWeight: 700 }}>sign in</Link>
-            {' · '}
-            <a href={EXTENSION_DOWNLOAD_URL} download rel="noreferrer" style={{ fontWeight: 700 }}>get the extension</a>
-            {' — downloads a zip, unzip then '}<span className="mono">chrome://extensions</span>{' → Developer mode → Load unpacked → pick the unzipped folder.'}
+            downloads a zip — unzip it, then <span className="mono">chrome://extensions</span> → Developer mode →
+            Load unpacked → pick the unzipped folder.
           </p>
         </div>
       </section>
