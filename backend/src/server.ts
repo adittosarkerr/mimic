@@ -41,15 +41,20 @@ app.use('/api', saas)
 
 const PORT = Number(process.env.PORT) || 4000
 
+// A bad/unreachable POSTGRES_URL must NEVER take the whole app down — on a
+// normal server process.exit(1) just triggers a restart, but on Vercel it
+// kills the ONE process serving every request, so a single wrong connection
+// string bricks the entire site (every route, not just DB-dependent ones).
+// Log it and start anyway; /api/health's own dbConnected check surfaces the
+// real problem instead.
 ensureSchema()
-  .then(() => {
+  .catch((err) => {
+    console.error('database schema init failed — starting anyway; /api/health will report the DB as unreachable:', err)
+  })
+  .finally(() => {
     app.listen(PORT, () => {
       console.log(
         `mimic backend listening on http://localhost:${PORT} (storage: ${dbEnabled ? 'postgres' : 'local files'})`,
       )
     })
-  })
-  .catch((err) => {
-    console.error('failed to initialize database schema:', err)
-    process.exit(1)
   })
