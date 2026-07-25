@@ -1,8 +1,10 @@
-// In production (Vercel etc.) point VITE_API_BASE at your deployed backend —
-// Playwright/browser automation can't run as a serverless function, so the
-// backend must be hosted separately (VPS, Railway, Render, Fly.io, or your
-// own machine). Falls back to localhost for local dev.
-const BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4545/api'
+// Local dev: the backend runs on its own port (localhost:4545). Production
+// build (Vercel etc.): default to a same-origin relative path — this repo's
+// vercel.json runs frontend + backend as two services in one project and
+// rewrites /api/* to the backend service, so a relative path just works with
+// no env var needed. Only set VITE_API_BASE if the backend is hosted
+// somewhere else entirely (a separate VPS, Railway, Render, Fly.io, etc).
+const BASE = import.meta.env.VITE_API_BASE || (import.meta.env.DEV ? 'http://localhost:4545/api' : '/api')
 /** Public base URL of the REST API — shown in the docs/curl examples. */
 export const API_BASE = BASE
 
