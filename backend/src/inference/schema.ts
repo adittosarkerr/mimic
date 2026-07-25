@@ -437,6 +437,28 @@ function strip(v: VariableField & { dateStrong?: boolean }): VariableField {
  * shared-event date-pair handling in engine.ts) even though only one was ever
  * actually recorded.
  */
+/**
+ * Mark location-style text inputs as autocomplete fields. Sites like Booking
+ * cars ("Pick-up location"), GoZayaan hotels ("City / area"), and tours resolve
+ * a typed place to an internal id ONLY when you pick from their suggestion
+ * dropdown — a plain fill leaves the search unresolved. Flagging these makes
+ * replay type-then-pick-a-suggestion instead of just typing.
+ */
+export function ensureAutocompleteFlags(variables: VariableField[]): VariableField[] {
+  return variables.map((v) => {
+    if (v.type !== 'text' || v.kind !== 'input' || v.autocomplete) return v
+    const s = `${v.name} ${v.label}`.toLowerCase()
+    if (
+      /destinat|origin|\bfrom\b|\bto\b|pick.?up|drop.?off|location|going|leaving|arriv|where|\bcity\b|airport|station|search/.test(
+        s,
+      )
+    ) {
+      return { ...v, autocomplete: true }
+    }
+    return v
+  })
+}
+
 export function ensureCheckoutDate(variables: VariableField[]): VariableField[] {
   const dateVars = variables.filter((v) => v.type === 'date')
   const hasGuestFields = variables.some((v) => v.kind === 'guests')

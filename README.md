@@ -44,10 +44,18 @@ curl -X POST http://localhost:4545/api/v1/automations/<id>/run \
 
 ## Coverage
 
-| Service | How it runs |
-| --- | --- |
-| Booking.com hotels, Booking.com flights, GoZayaan flights | Deterministic — builds the site's own results URL from your inputs |
-| Everything else (Booking cars/attractions/taxis, GoZayaan hotels/tours/visa, other sites) | Recorded-step replay — best via **run in my browser** |
+**Deterministic** builds the site's own results URL from your inputs (rock-solid on `go`). **Autocomplete replay** types your value and picks the site's own suggestion — runs best via **run in my browser** (your logged-in tab), which is where these services resolve their internal place-IDs.
+
+| Booking.com | GoZayaan | How it runs |
+| --- | --- | --- |
+| Hotels (stays) | Flights | Deterministic — direct results URL |
+| Flights (kayak) | — | Deterministic — direct results URL |
+| Attractions | — | Deterministic — direct results URL |
+| Car rental | Hotels | Autocomplete replay (run in my browser) |
+| Airport taxis | Tours | Autocomplete replay (run in my browser) |
+| — | Visa | Autocomplete replay (run in my browser) |
+
+**Also supported:** star / breakfast / cancellation **filters** (Booking hotels), **currency** change (`selected_currency` on Booking stays + attractions), and generic recorded-step replay + structured result extraction on **any other site**.
 
 ## Notes
 

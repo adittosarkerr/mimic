@@ -348,7 +348,7 @@ async function selectAutocompleteInPage(input: HTMLElement, value: string): Prom
     input.dispatchEvent(new KeyboardEvent('keydown', { key: ch, bubbles: true }))
     await sleep(70)
   }
-  const optSel = '[data-testid="autocomplete-result"], [role="option"], ul[role="listbox"] li, [class*="autocomplete" i] li, [class*="suggestion" i]'
+  const optSel = '[data-testid="autocomplete-result"], [role="option"], [role="listbox"] [role="option"], ul[role="listbox"] li, [data-testid*="suggestion" i], [class*="autocomplete" i] li, [class*="suggestion" i], [class*="dropdown" i] li, [class*="result-item" i], [class*="option-item" i]'
   // Poll for a suggestion that ACTUALLY matches — spacing/punctuation stripped
   // so "KualaLumpur" matches "Kuala Lumpur, Malaysia". Never a random first
   // option (wrong city). Fall back to Enter.

@@ -1,7 +1,7 @@
 import { Router, type Request } from 'express'
 import type { AutomationSchema, RecordingSession } from '../types.js'
 import { store } from '../store/index.js'
-import { collapseInputEvents, detectEmailAction, detectLogin, detectVariablesHeuristic, ensureCheckoutDate, refineWithLlm, synthesizeForm } from '../inference/schema.js'
+import { collapseInputEvents, detectEmailAction, detectLogin, detectVariablesHeuristic, ensureAutocompleteFlags, ensureCheckoutDate, refineWithLlm, synthesizeForm } from '../inference/schema.js'
 import { introspectForm } from '../inference/introspect.js'
 import { replaySession, loginSession, buildReplaySteps } from '../replay/engine.js'
 import type { Credentials } from '../types.js'
@@ -70,6 +70,7 @@ api.post('/recordings/:id/analyze', async (req, res) => {
     refined = await refineWithLlm(rec, remapped)
   }
   refined.variables = ensureCheckoutDate(refined.variables)
+  refined.variables = ensureAutocompleteFlags(refined.variables)
 
   // Live-read the real form so dropdowns show genuine options and numeric
   // fields carry real bounds. Best-effort — never blocks automation creation.

@@ -138,7 +138,7 @@ async function selectAutocomplete(frame: Frame, input: Locator, value: string): 
   }
 
   const optionSel =
-    '[data-testid="autocomplete-result"], [role="option"], ul[role="listbox"] li, [data-testid*="autocomplete" i] li, [class*="autocomplete" i] li, [class*="suggestion" i]'
+    '[data-testid="autocomplete-result"], [role="option"], [role="listbox"] [role="option"], ul[role="listbox"] li, [data-testid*="autocomplete" i] li, [data-testid*="suggestion" i], [class*="autocomplete" i] li, [class*="suggestion" i], [class*="dropdown" i] li, [class*="result-item" i], [class*="option-item" i]'
   // Poll for a suggestion that ACTUALLY matches what we typed. Compare with
   // spacing/punctuation stripped so "KualaLumpur" matches "Kuala Lumpur,
   // Malaysia". Never click a random "first option" (wrong city); only a real
