@@ -1,4 +1,8 @@
-const BASE = 'http://localhost:4545/api'
+// In production (Vercel etc.) point VITE_API_BASE at your deployed backend —
+// Playwright/browser automation can't run as a serverless function, so the
+// backend must be hosted separately (VPS, Railway, Render, Fly.io, or your
+// own machine). Falls back to localhost for local dev.
+const BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4545/api'
 /** Public base URL of the REST API — shown in the docs/curl examples. */
 export const API_BASE = BASE
 
