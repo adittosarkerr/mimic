@@ -1,8 +1,10 @@
 import { useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 
-// Point this at the public extension repo before launch.
-const EXTENSION_REPO_URL = 'https://github.com/'
+// Pre-built extension zip, published as a GitHub release asset (re-uploaded
+// in place as the extension changes, so this URL stays stable). Unzip, then
+// chrome://extensions -> Developer mode -> Load unpacked -> pick the folder.
+const EXTENSION_DOWNLOAD_URL = 'https://github.com/adittosarkerr/mimic/releases/download/extension-latest/mimic-extension.zip'
 
 function HeroCanvas() {
   const ref = useRef<HTMLCanvasElement>(null)
@@ -122,10 +124,14 @@ export default function Home() {
             <Link to="/dashboard">
               <button className="btn" style={{ fontSize: 16, padding: '13px 28px' }}>open dashboard</button>
             </Link>
-            <a href={EXTENSION_REPO_URL} target="_blank" rel="noreferrer">
+            <a href={EXTENSION_DOWNLOAD_URL} download rel="noreferrer">
               <button className="btn btn-ghost" style={{ fontSize: 16, padding: '13px 28px' }}>get the extension</button>
             </a>
           </div>
+          <p style={{ fontSize: 13, color: 'var(--ink-soft)', marginTop: 14, pointerEvents: 'auto' }}>
+            downloads a zip — unzip it, then <span className="mono">chrome://extensions</span> → Developer mode →
+            Load unpacked → pick the unzipped folder.
+          </p>
         </div>
       </section>
 
