@@ -1,0 +1,380 @@
+<title>Mimic — record a web task once, replay it forever</title>
+<style>
+  :root {
+    --beige: #f5efe6;
+    --beige-deep: #ede4d3;
+    --card: #faf6ef;
+    --ink: #2b2420;
+    --ink-soft: rgba(43, 36, 32, 0.66);
+    --ink-faint: rgba(43, 36, 32, 0.14);
+    --orange: #d8672a;
+    --orange-soft: #f0946b;
+    --orange-dark: #b84a1d;
+    --good: #1c7a52;
+    --good-bg: rgba(28, 122, 82, 0.12);
+    --warn: #a4671b;
+    --warn-bg: rgba(184, 122, 30, 0.14);
+    --shadow: 4px 4px 0 var(--ink);
+    --shadow-sm: 3px 3px 0 var(--ink);
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+    --line: 2.5px solid var(--ink);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --beige: #201b17;
+      --beige-deep: #2a231d;
+      --card: #2a231d;
+      --ink: #f3e9dc;
+      --ink-soft: rgba(243, 233, 220, 0.66);
+      --ink-faint: rgba(243, 233, 220, 0.16);
+      --orange: #e8783b;
+      --orange-soft: #c9612e;
+      --orange-dark: #f0946b;
+      --good: #5cc998;
+      --good-bg: rgba(92, 201, 152, 0.14);
+      --warn: #e0a54e;
+      --warn-bg: rgba(224, 165, 78, 0.16);
+      --shadow: 4px 4px 0 #0d0a08;
+      --shadow-sm: 3px 3px 0 #0d0a08;
+      --line: 2.5px solid var(--ink);
+    }
+  }
+  :root[data-theme="light"] {
+    --beige: #f5efe6; --beige-deep: #ede4d3; --card: #faf6ef;
+    --ink: #2b2420; --ink-soft: rgba(43,36,32,0.66); --ink-faint: rgba(43,36,32,0.14);
+    --orange: #d8672a; --orange-soft: #f0946b; --orange-dark: #b84a1d;
+    --good: #1c7a52; --good-bg: rgba(28,122,82,0.12); --warn: #a4671b; --warn-bg: rgba(184,122,30,0.14);
+    --shadow: 4px 4px 0 var(--ink); --shadow-sm: 3px 3px 0 var(--ink);
+  }
+  :root[data-theme="dark"] {
+    --beige: #201b17; --beige-deep: #2a231d; --card: #2a231d;
+    --ink: #f3e9dc; --ink-soft: rgba(243,233,220,0.66); --ink-faint: rgba(243,233,220,0.16);
+    --orange: #e8783b; --orange-soft: #c9612e; --orange-dark: #f0946b;
+    --good: #5cc998; --good-bg: rgba(92,201,152,0.14); --warn: #e0a54e; --warn-bg: rgba(224,165,78,0.16);
+    --shadow: 4px 4px 0 #0d0a08; --shadow-sm: 3px 3px 0 #0d0a08;
+  }
+
+  * { box-sizing: border-box; }
+  .wrap {
+    font-family: var(--sans);
+    color: var(--ink);
+    background:
+      radial-gradient(ellipse 60% 50% at 18% 8%, rgba(240, 148, 107, 0.22), transparent 60%),
+      radial-gradient(ellipse 50% 40% at 88% 24%, rgba(216, 103, 42, 0.16), transparent 60%),
+      radial-gradient(ellipse 80% 60% at 50% 100%, rgba(216, 103, 42, 0.10), transparent 70%),
+      var(--beige);
+    min-height: 100vh;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  .shell { max-width: 1040px; margin: 0 auto; padding: 0 22px; }
+  h1, h2, h3 { margin: 0; font-weight: 800; letter-spacing: -0.025em; text-wrap: balance; }
+  p { margin: 0; }
+  a { color: var(--orange-dark); text-decoration: none; }
+  .mono { font-family: var(--mono); }
+
+  /* nav */
+  nav {
+    position: sticky; top: 14px; z-index: 40; max-width: 1040px; margin: 14px auto 0;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 11px 20px; border: var(--line); border-radius: 14px;
+    background: color-mix(in srgb, var(--card) 78%, transparent);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    box-shadow: var(--shadow-sm);
+  }
+  .wordmark { font-weight: 800; font-size: 21px; letter-spacing: -0.03em; color: var(--ink); }
+  .wordmark b { color: var(--orange); }
+  .navlinks { display: flex; gap: 20px; align-items: center; }
+  .navlinks a { color: var(--ink-soft); font-weight: 600; font-size: 14px; }
+  .navlinks a:hover { color: var(--ink); }
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700;
+    padding: 4px 11px; border-radius: 999px; border: 2px solid var(--ink);
+    background: var(--orange-soft); color: #2b2420;
+  }
+
+  .btn {
+    font-family: var(--sans); font-weight: 700; font-size: 14.5px; padding: 12px 22px;
+    border: var(--line); border-radius: 11px; background: var(--orange); color: #fff;
+    cursor: pointer; box-shadow: var(--shadow-sm); display: inline-flex; align-items: center; gap: 9px;
+    transition: transform .08s ease, box-shadow .08s ease, background .12s ease;
+  }
+  .btn:hover { background: var(--orange-dark); }
+  .btn:active { transform: translate(2px,2px); box-shadow: 1px 1px 0 var(--ink); }
+  .btn.ghost { background: transparent; color: var(--ink); }
+  .btn.ghost:hover { background: var(--beige-deep); }
+  .btn:focus-visible { outline: 3px solid var(--orange); outline-offset: 3px; }
+
+  /* hero */
+  header { padding: 62px 0 30px; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 9px; font-family: var(--mono);
+    font-size: 12.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--ink-soft); margin-bottom: 20px;
+  }
+  .rec { width: 11px; height: 11px; border-radius: 50%; background: var(--orange); flex: 0 0 auto;
+    box-shadow: 0 0 0 0 var(--orange); animation: rec 1.9s ease-out infinite; }
+  @keyframes rec {
+    0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--orange) 70%, transparent); }
+    70% { box-shadow: 0 0 0 9px transparent; } 100% { box-shadow: 0 0 0 0 transparent; }
+  }
+  @media (prefers-reduced-motion: reduce) { .rec { animation: none; } }
+  h1.hero { font-size: clamp(38px, 6.4vw, 68px); line-height: 1.02; }
+  h1.hero .lede { color: var(--orange); display: block; }
+  .sub { font-size: clamp(16px, 2vw, 19px); color: var(--ink-soft); max-width: 56ch; margin-top: 22px; }
+  .cta { display: flex; gap: 13px; margin-top: 30px; flex-wrap: wrap; }
+  .heronote { margin-top: 16px; font-size: 13px; color: var(--ink-soft); font-family: var(--mono); }
+
+  /* generic card + grid */
+  .brutal { background: var(--card); border: var(--line); border-radius: 14px; box-shadow: var(--shadow); }
+  section { padding: 34px 0; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 22px; flex-wrap: wrap; }
+  .sec-head h2 { font-size: clamp(24px, 3.4vw, 34px); }
+  .sec-kicker { font-family: var(--mono); font-size: 12.5px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--orange-dark); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 16px; }
+  .feature { padding: 22px 22px 24px; transition: transform .12s ease, box-shadow .12s ease; }
+  .feature:hover { transform: translate(-2px,-2px); box-shadow: 6px 6px 0 var(--ink); }
+  @media (prefers-color-scheme: dark) { .feature:hover { box-shadow: 6px 6px 0 #0d0a08; } }
+  :root[data-theme="dark"] .feature:hover { box-shadow: 6px 6px 0 #0d0a08; }
+  .feature .ico { font-family: var(--mono); font-weight: 700; font-size: 13px; color: var(--orange);
+    border: 2px solid var(--ink); border-radius: 8px; width: 34px; height: 34px; display: grid;
+    place-items: center; margin-bottom: 14px; background: var(--beige-deep); }
+  .feature h3 { font-size: 17.5px; margin-bottom: 7px; }
+  .feature p { font-size: 14px; color: var(--ink-soft); }
+
+  /* steps (a real sequence: numbering earns its place) */
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; }
+  .step { padding: 20px; position: relative; }
+  .step .n { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--orange-dark);
+    border-bottom: 2px solid var(--orange-soft); padding-bottom: 3px; }
+  .step h3 { font-size: 16px; margin: 12px 0 6px; }
+  .step p { font-size: 13.5px; color: var(--ink-soft); }
+
+  /* coverage table */
+  .tablewrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; min-width: 520px; }
+  th, td { text-align: left; padding: 13px 16px; border-bottom: 1.5px solid var(--ink-faint); font-size: 14px; }
+  th { font-family: var(--mono); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--ink-soft); font-weight: 600; }
+  td:first-child { font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  .tag { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700;
+    padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+  .tag.good { color: var(--good); background: var(--good-bg); }
+  .tag.warn { color: var(--warn); background: var(--warn-bg); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+  /* code */
+  pre { margin: 0; padding: 18px 20px; border-radius: 12px; background: #1c1712; color: #f2e7d8;
+    font-family: var(--mono); font-size: 13px; line-height: 1.7; overflow-x: auto; border: var(--line); }
+  pre .c { color: #b79b7d; } pre .k { color: var(--orange-soft); } pre .s { color: #9ecb8f; }
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .split { grid-template-columns: 1fr; } }
+
+  /* plans */
+  .plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(216px, 1fr)); gap: 16px; }
+  .plan { padding: 22px 20px; display: flex; flex-direction: column; gap: 12px; }
+  .plan.feat { border-color: var(--orange); box-shadow: 4px 4px 0 var(--orange); }
+  .plan h3 { font-size: 20px; }
+  .plan .tagline { font-size: 12.5px; color: var(--ink-soft); font-style: italic; }
+  .plan .price { font-size: 26px; font-weight: 800; }
+  .plan .price span { font-size: 12.5px; font-weight: 500; color: var(--ink-soft); }
+  .plan ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 7px; }
+  .plan li { font-size: 13px; padding-left: 19px; position: relative; }
+  .plan li::before { content: "✓"; position: absolute; left: 0; color: var(--orange); font-weight: 800; }
+
+  .callout { padding: 22px 24px; display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+  .callout .rec { margin-top: 6px; }
+
+  footer { padding: 42px 0 60px; color: var(--ink-soft); font-size: 13.5px; border-top: 1.5px solid var(--ink-faint); margin-top: 20px; }
+  .foot-row { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: center; }
+</style>
+
+<div class="wrap">
+  <nav>
+    <span class="wordmark">mimic<b>.</b></span>
+    <span class="navlinks">
+      <a href="#what">what</a>
+      <a href="#how">how</a>
+      <a href="#coverage">coverage</a>
+      <a href="#run">run it</a>
+      <a href="#api">api</a>
+    </span>
+  </nav>
+
+  <div class="shell">
+    <header>
+      <span class="eyebrow"><span class="rec"></span> record-and-replay web automation</span>
+      <h1 class="hero">Record a task once.<span class="lede">Replay it forever.</span></h1>
+      <p class="sub">
+        Do a task on any website while Mimic watches — a hotel search, a flight lookup, an email.
+        Mimic turns it into a reusable automation with a fill-in-the-blanks form and a REST API, so you
+        (or your code) can run it again with new inputs and get clean results back.
+      </p>
+      <div class="cta">
+        <a class="btn" href="#run">Run it locally <span aria-hidden="true">→</span></a>
+        <a class="btn ghost" href="#api">See the REST API</a>
+      </div>
+      <p class="heronote">Chrome extension · Node + Playwright backend · React frontend — self-hosted, open on your machine.</p>
+    </header>
+
+    <section id="what">
+      <div class="sec-head"><span class="sec-kicker">what it does</span><h2>One recording, many ways to run it</h2></div>
+      <div class="grid">
+        <div class="brutal feature">
+          <div class="ico">●</div>
+          <h3>Record &amp; replay</h3>
+          <p>The extension captures your clicks and inputs with resilient multi-signal selectors, then replays the task on demand.</p>
+        </div>
+        <div class="brutal feature">
+          <div class="ico">▢</div>
+          <h3>Fill-in-the-blanks forms</h3>
+          <p>Mimic reads the recording and generates a clean form — change the destination, the dates, the guests, then press <b>go</b>.</p>
+        </div>
+        <div class="brutal feature">
+          <div class="ico">{ }</div>
+          <h3>REST API + keys</h3>
+          <p>Every automation is also an endpoint. Generate an API key, <span class="mono">POST</span> your inputs, get JSON results — from any script.</p>
+        </div>
+        <div class="brutal feature">
+          <div class="ico">◎</div>
+          <h3>Deterministic site adapters</h3>
+          <p>For sites we understand, Mimic skips fragile replay and builds the real results URL directly — same inputs, same results, every run.</p>
+        </div>
+        <div class="brutal feature">
+          <div class="ico">✕</div>
+          <h3>Two ways to run</h3>
+          <p><b>go</b> runs on the server and returns output here. <b>run in my browser</b> replays in your own logged-in tab for sites that need a session.</p>
+        </div>
+        <div class="brutal feature">
+          <div class="ico">♪</div>
+          <h3>Accounts, plans &amp; marketplace</h3>
+          <p>Sign-in, subscription tiers, saved (dummy) payment methods, and a marketplace to list automations for others to buy.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="how">
+      <div class="sec-head"><span class="sec-kicker">how it works</span><h2>Record → build → run → automate</h2></div>
+      <div class="steps">
+        <div class="brutal step"><span class="n">01</span><h3>Record</h3><p>Hit record in the extension and do the task once, on the real site, like you always would.</p></div>
+        <div class="brutal step"><span class="n">02</span><h3>Build</h3><p>Mimic analyzes the recording and synthesizes a form — the fields it found are the inputs you can change.</p></div>
+        <div class="brutal step"><span class="n">03</span><h3>Run</h3><p>Enter new values, press go, and get a clean list of results back — hotels, flights, whatever the task returns.</p></div>
+        <div class="brutal step"><span class="n">04</span><h3>Automate</h3><p>Grab an API key and call the same automation from your own code, on a schedule, or from another app.</p></div>
+      </div>
+    </section>
+
+    <section id="coverage">
+      <div class="sec-head"><span class="sec-kicker">honest coverage</span><h2>What runs deterministically today</h2></div>
+      <p class="sub" style="margin-bottom:20px">
+        Deterministic runs build the site's own results URL from your inputs — rock-solid and repeatable. Everything
+        else replays your recorded steps (best in <b>run&nbsp;in&nbsp;my&nbsp;browser</b>, in your logged-in tab).
+      </p>
+      <div class="brutal tablewrap">
+        <table>
+          <thead><tr><th>Service</th><th>How it runs</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>Booking.com — hotels</td><td>Direct results URL (city, dates, guests, star/breakfast filters, currency)</td><td><span class="tag good"><span class="dot"></span>Deterministic</span></td></tr>
+            <tr><td>Booking.com — flights</td><td>Direct results URL on booking.kayak.com (airports by IATA)</td><td><span class="tag good"><span class="dot"></span>Deterministic</span></td></tr>
+            <tr><td>GoZayaan — flights</td><td>Direct results URL (airports by IATA, one-way &amp; round-trip)</td><td><span class="tag good"><span class="dot"></span>Deterministic</span></td></tr>
+            <tr><td>Booking cars · attractions · taxis</td><td>Recorded-step replay — need the site's own place picker</td><td><span class="tag warn"><span class="dot"></span>Browser replay</span></td></tr>
+            <tr><td>GoZayaan — hotels · tours · visa</td><td>Recorded-step replay — need an internal place-ID</td><td><span class="tag warn"><span class="dot"></span>Browser replay</span></td></tr>
+            <tr><td>Any other recorded site</td><td>Recorded-step replay + generic result extraction</td><td><span class="tag warn"><span class="dot"></span>Browser replay</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="run">
+      <div class="sec-head"><span class="sec-kicker">run it yourself</span><h2>Up and running in three terminals</h2></div>
+      <p class="sub" style="margin-bottom:20px">Needs Node 18+ and a Chromium-based browser (Chrome, Edge, or Brave).</p>
+      <div class="split">
+        <div>
+          <pre><span class="c"># 1 · backend — API + Playwright engine</span>
+<span class="k">cd</span> backend
+npm install
+npm run dev        <span class="c"># http://localhost:4545</span>
+
+<span class="c"># 2 · frontend — the mimic web app</span>
+<span class="k">cd</span> frontend
+npm install
+npm run dev        <span class="c"># http://localhost:5174</span></pre>
+        </div>
+        <div>
+          <pre><span class="c"># 3 · extension — record on any site</span>
+<span class="k">cd</span> extension
+npm install
+npm run build
+
+<span class="c"># then in chrome://extensions</span>
+<span class="c"># → Developer mode → Load unpacked</span>
+<span class="c"># → pick the  extension/dist  folder</span></pre>
+          <p style="font-size:13px;color:var(--ink-soft);margin-top:14px">
+            Optional: drop a DeepSeek API key in <span class="mono">backend/.env</span> for smarter form
+            synthesis — without it, Mimic falls back to built-in heuristics.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section id="api">
+      <div class="sec-head"><span class="sec-kicker">rest api</span><h2>Call any automation from code</h2></div>
+      <p class="sub" style="margin-bottom:20px">Create a key in <b>account → API access</b>, then run an automation by id:</p>
+      <pre><span class="k">curl</span> -X POST https://your-host/api/v1/automations/&lt;id&gt;/run \
+  -H <span class="s">"Authorization: Bearer mk_live_…"</span> \
+  -H <span class="s">"Content-Type: application/json"</span> \
+  -d <span class="s">'{"variables": {"destination": "Bangkok", "check_in_date": "2026-09-10"}}'</span></pre>
+      <p style="font-size:13.5px;color:var(--ink-soft);margin-top:14px">Returns JSON: run id, status, and the extracted <span class="mono">results</span> array. Keys are per-account; no key, no run.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="sec-kicker">plans</span><h2>Pick your song</h2></div>
+      <div class="plans">
+        <div class="brutal plan">
+          <div><h3>Fledgling</h3><div class="tagline">Leave the nest — try it free</div></div>
+          <div class="price">Free</div>
+          <ul><li>5 automation builds / day</li><li>Unlimited runs on saved automations</li><li>Community support</li></ul>
+        </div>
+        <div class="brutal plan">
+          <div><h3>Songbird</h3><div class="tagline">Find your voice</div></div>
+          <div class="price">1500 <span>BDT/mo</span></div>
+          <ul><li>30 automation builds / day</li><li>Unlimited runs</li><li>Priority support</li></ul>
+        </div>
+        <div class="brutal plan feat">
+          <div><h3>Mockingbird</h3><div class="tagline">Mimic anything, sell everything</div></div>
+          <div class="price">3500 <span>BDT/mo</span></div>
+          <ul><li>Unlimited builds</li><li>Marketplace seller access</li><li>Lower platform fees</li><li>Early access</li></ul>
+        </div>
+        <div class="brutal plan">
+          <div><h3>Lyrebird</h3><div class="tagline">The ultimate mimic — for teams</div></div>
+          <div class="price">Custom</div>
+          <ul><li>Everything in Mockingbird</li><li>Team accounts</li><li>Dedicated support</li><li>Custom billing</li></ul>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="brutal callout">
+        <span class="rec"></span>
+        <div style="flex:1;min-width:240px">
+          <h3 style="font-size:18px;margin-bottom:6px">This page is the front door — the engine runs on your machine</h3>
+          <p style="font-size:14px;color:var(--ink-soft)">
+            Mimic drives a real browser (Playwright) and ships a Chrome extension, so it can't live inside a
+            sandboxed page. Clone the repo, run the three commands above, and it's yours. Deploy the backend +
+            frontend to a host to let others reach your instance.
+          </p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer>
+    <div class="shell foot-row">
+      <span class="wordmark" style="font-size:18px">mimic<b>.</b></span>
+      <span>Record once, replay forever. · Built with Playwright, React &amp; a lot of recordings.</span>
+    </div>
+  </footer>
+</div>

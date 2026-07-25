@@ -1,0 +1,144 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+:root {
+  --beige: #f5efe6;
+  --beige-deep: #ede4d3;
+  --beige-glass: rgba(245, 239, 230, 0.6);
+  --ink: #2b2420;
+  --ink-soft: rgba(43, 36, 32, 0.65);
+  --orange: #d8672a;
+  --orange-soft: #f0946b;
+  --orange-dark: #b84a1d;
+  --hard-shadow: 4px 4px 0 var(--ink);
+  --hard-shadow-sm: 3px 3px 0 var(--ink);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  background: var(--beige);
+  color: var(--ink);
+  min-height: 100vh;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse 60% 50% at 20% 10%, rgba(240, 148, 107, 0.25), transparent 60%),
+    radial-gradient(ellipse 50% 40% at 85% 30%, rgba(216, 103, 42, 0.18), transparent 60%),
+    radial-gradient(ellipse 70% 60% at 50% 95%, rgba(237, 228, 211, 0.9), transparent 70%),
+    var(--beige);
+}
+
+h1, h2, h3 {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+a {
+  color: var(--orange-dark);
+  text-decoration: none;
+}
+
+code, .mono {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.glass {
+  background: var(--beige-glass);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 18px;
+  box-shadow: 0 8px 32px rgba(43, 36, 32, 0.08);
+}
+
+.brutal {
+  background: var(--beige);
+  border: 2.5px solid var(--ink);
+  border-radius: 12px;
+  box-shadow: var(--hard-shadow);
+}
+
+.btn {
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  padding: 10px 20px;
+  border: 2.5px solid var(--ink);
+  border-radius: 10px;
+  background: var(--orange);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: var(--hard-shadow-sm);
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+
+.btn:hover {
+  background: var(--orange-dark);
+}
+
+.btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 var(--ink);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--ink);
+}
+
+.btn-ghost:hover {
+  background: var(--beige-deep);
+}
+
+input, select, textarea {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 15px;
+  padding: 11px 14px;
+  border: 2.5px solid var(--ink);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  width: 100%;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(216, 103, 42, 0.35);
+}
+
+.container {
+  max-width: 1060px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.pill-tag {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 2px solid var(--ink);
+  background: var(--orange-soft);
+  color: var(--ink);
+}

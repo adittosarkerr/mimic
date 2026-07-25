@@ -1,0 +1,32 @@
+# dependencies
+node_modules/
+**/node_modules/
+
+# secrets — never commit
+.env
+**/.env
+*.env
+!*.env.example
+
+# runtime user data (recordings, automations, runs, snapshots, sessions, keys)
+backend/data/
+
+# build output
+dist/
+**/dist/
+build/
+**/build/
+*.tsbuildinfo
+
+# playwright / browser profiles
+**/mimic-stealth-*/
+**/.playwright/
+playwright-report/
+
+# logs & os junk
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
