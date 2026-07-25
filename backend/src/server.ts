@@ -39,6 +39,19 @@ app.get('/api/health', health)
 app.use('/api', api)
 app.use('/api', saas)
 
+// Express 5 auto-forwards a rejected promise from any async route handler to
+// error-handling middleware (e.g. a query against an unreachable database) —
+// but its BUILT-IN handler renders an HTML page. The frontend always expects
+// JSON (`res.json()`), so an unhandled error was surfacing there as
+// "Unexpected token '<', <!DOCTYPE...'" instead of a readable message. This
+// must be registered after every route (4-arg signature is how Express
+// recognizes error middleware).
+app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('unhandled route error:', err)
+  if (res.headersSent) return
+  res.status(500).json({ error: err instanceof Error ? err.message : 'internal server error' })
+})
+
 const PORT = Number(process.env.PORT) || 4000
 
 // A bad/unreachable POSTGRES_URL must NEVER take the whole app down — on a

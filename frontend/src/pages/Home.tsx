@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { auth } from '../api'
 
 // Pre-built extension zip, published as a GitHub release asset (re-uploaded
 // in place as the extension changes, so this URL stays stable). Unzip, then
@@ -105,6 +106,10 @@ function HeroCanvas() {
 }
 
 export default function Home() {
+  // Signed-in visitors go straight back to their dashboard; new visitors get
+  // sign up (primary) and sign in (for people who already made an account).
+  const [signedIn] = useState(() => !!auth.token())
+
   return (
     <div className="container">
       <section style={{ position: 'relative', padding: '90px 0 60px', minHeight: 480 }}>
@@ -120,10 +125,21 @@ export default function Home() {
             Record any task on any website — searching, booking, posting — and mimic turns it into a reusable
             automation with a simple form. Even across multiple sites.
           </p>
-          <div style={{ marginTop: 32, display: 'flex', gap: 14, pointerEvents: 'auto' }}>
-            <Link to="/dashboard">
-              <button className="btn" style={{ fontSize: 16, padding: '13px 28px' }}>open dashboard</button>
-            </Link>
+          <div style={{ marginTop: 32, display: 'flex', gap: 14, flexWrap: 'wrap', pointerEvents: 'auto' }}>
+            {signedIn ? (
+              <Link to="/dashboard">
+                <button className="btn" style={{ fontSize: 16, padding: '13px 28px' }}>open dashboard</button>
+              </Link>
+            ) : (
+              <>
+                <Link to="/auth?mode=register">
+                  <button className="btn" style={{ fontSize: 16, padding: '13px 28px' }}>sign up</button>
+                </Link>
+                <Link to="/auth?mode=login">
+                  <button className="btn btn-ghost" style={{ fontSize: 16, padding: '13px 28px' }}>sign in</button>
+                </Link>
+              </>
+            )}
             <a href={EXTENSION_DOWNLOAD_URL} download rel="noreferrer">
               <button className="btn btn-ghost" style={{ fontSize: 16, padding: '13px 28px' }}>get the extension</button>
             </a>

@@ -64,12 +64,12 @@ This repo has a root `vercel.json` deploying **frontend** (Vite) and **backend**
 1. Import the repo into Vercel (`New Project` → pick this repo). It should detect both services automatically from `vercel.json`.
 2. **Add a database** — any Postgres works, pick one:
    - **Vercel Postgres**: project → **Storage** → **Create Database** → Postgres → **Connect** — sets `POSTGRES_URL` for you automatically.
-   - **Supabase** (or Neon, Railway, etc.): create a free project → Project Settings → Database → Connection string → **URI** (the direct one, not the pgbouncer/pooled one) → paste it into `POSTGRES_URL` under Vercel's Project Settings → Environment Variables yourself.
+   - **Supabase** (or Neon, Railway, etc.): create a free project → Project Settings → Database → Connection string → pick the **"Transaction pooler"** tab (**not** "Direct connection" — confirmed by DNS lookup that Supabase's direct hostname is IPv6-only, and Vercel has no IPv6 egress, so it fails as `ENOTFOUND` no matter how correctly it's copied) → copy the **URI** → paste it into `POSTGRES_URL` under Vercel's Project Settings → Environment Variables yourself.
 
    Without one of these, data written on Vercel vanishes on every redeploy (no persistent disk there) — same code either way, it's just a connection string.
 3. Set **`CRED_ENCRYPTION_KEY`** in Project Settings → Environment Variables (generate with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`). Required once a database is attached — without it, saved login credentials / email configs become undecryptable after any restart.
 4. Optionally set `DEEPSEEK_API_KEY` and `VITE_API_BASE` (defaults to same-origin `/api`, which the rewrites already handle).
-5. Deploy.
+5. Deploy. Note: changing an environment variable in Vercel's dashboard does **not** restart an already-running deployment — it only applies to the next one, so trigger a redeploy after editing `POSTGRES_URL` or any other var. Check `/api/health` afterwards (`{"dbConnected": true}` means it's genuinely working, not just configured).
 
 Known limits on Vercel specifically: **assisted mode** (a visible browser window for solving a CAPTCHA) can't work there — no display on a server. Headless/stealth replay and all deterministic adapters are unaffected.
 
