@@ -430,11 +430,82 @@ const bookingFlightAdapter: SiteAdapter = {
   })()`,
 }
 
+// --- booking.com attractions ----------------------------------------------
+
+/** City → ISO country code, for building attraction result URLs. */
+const CITY_CC: Record<string, string> = {
+  dhaka: 'bd', chittagong: 'bd', chattogram: 'bd', coxsbazar: 'bd', cox: 'bd', sylhet: 'bd',
+  kolkata: 'in', calcutta: 'in', delhi: 'in', newdelhi: 'in', mumbai: 'in', bombay: 'in',
+  chennai: 'in', bangalore: 'in', bengaluru: 'in', hyderabad: 'in', kochi: 'in', goa: 'in',
+  jaipur: 'in', agra: 'in', kathmandu: 'np', male: 'mv', maldives: 'mv', colombo: 'lk',
+  karachi: 'pk', lahore: 'pk', islamabad: 'pk',
+  bangkok: 'th', phuket: 'th', chiangmai: 'th', kualalumpur: 'my', penang: 'my',
+  singapore: 'sg', jakarta: 'id', bali: 'id', denpasar: 'id', manila: 'ph',
+  hochiminh: 'vn', hanoi: 'vn', yangon: 'mm', phnompenh: 'kh', siemreap: 'kh',
+  hongkong: 'hk', guangzhou: 'cn', beijing: 'cn', shanghai: 'cn', seoul: 'kr',
+  tokyo: 'jp', osaka: 'jp', kyoto: 'jp', taipei: 'tw',
+  dubai: 'ae', abudhabi: 'ae', sharjah: 'ae', doha: 'qa', jeddah: 'sa', riyadh: 'sa',
+  mecca: 'sa', medina: 'sa', muscat: 'om', manama: 'bh', kuwait: 'kw', amman: 'jo', beirut: 'lb',
+  london: 'gb', manchester: 'gb', edinburgh: 'gb', paris: 'fr', nice: 'fr', frankfurt: 'de',
+  munich: 'de', berlin: 'de', amsterdam: 'nl', istanbul: 'tr', rome: 'it', milan: 'it',
+  venice: 'it', florence: 'it', madrid: 'es', barcelona: 'es', zurich: 'ch', vienna: 'at',
+  brussels: 'be', dublin: 'ie', athens: 'gr', lisbon: 'pt', prague: 'cz', copenhagen: 'dk',
+  stockholm: 'se', moscow: 'ru',
+  newyork: 'us', losangeles: 'us', sanfrancisco: 'us', lasvegas: 'us', miami: 'us',
+  orlando: 'us', chicago: 'us', boston: 'us', washington: 'us', seattle: 'us', honolulu: 'us',
+  toronto: 'ca', vancouver: 'ca', montreal: 'ca', sydney: 'au', melbourne: 'au',
+  cairo: 'eg', nairobi: 'ke', johannesburg: 'za', capetown: 'za', marrakesh: 'ma',
+}
+
+const bookingAttractionsAdapter: SiteAdapter = {
+  id: 'booking-attractions',
+  label: 'Booking.com attractions',
+  matches: (urls) => urls.some((u) => /booking\.com\/attractions/i.test(u)),
+  build(schema, values) {
+    const city = pickValue(schema, values, (s) => /destinat|where|city|going|location|attraction|search|\bto\b/i.test(s))
+    if (!city) return null
+    const key = city.toLowerCase().replace(/[^a-z]/g, '')
+    // resolve country: exact map hit, else any city name contained in the input
+    let cc = CITY_CC[key]
+    if (!cc) for (const [name, code] of Object.entries(CITY_CC)) if (key.includes(name)) { cc = code; break }
+    if (!cc) return null
+    const slug = city.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+    const cur = currencyCode(pickValue(schema, values, (s) => /currency|curr\b/i.test(s)))
+    const q = cur ? `?selected_currency=${cur}` : ''
+    return { url: `https://www.booking.com/attractions/searchresults/${cc}/${slug}.html${q}`, waitSelector: '[data-testid="card"]' }
+  },
+  extractScript: `(() => {
+    const abs = (u) => { try { return u ? new URL(u, location.href).toString() : null } catch { return null } };
+    const clean = (t) => (t || '').trim().replace(/\\s+/g, ' ');
+    const cards = Array.from(document.querySelectorAll('[data-testid="card"]')).slice(0, 40);
+    const results = [];
+    const seen = new Set();
+    for (const card of cards) {
+      const title = clean((card.querySelector('[data-testid="card-title"]') || {}).textContent);
+      if (!title || seen.has(title)) continue; seen.add(title);
+      const a = card.querySelector('a[href]');
+      const href = a ? abs(a.getAttribute('href')) : null;
+      const img = card.querySelector('img');
+      let thumb = img ? abs(img.currentSrc || img.src) : null;
+      if (thumb && thumb.startsWith('data:')) thumb = null;
+      let price = clean((card.querySelector('[data-testid="price"]') || {}).textContent);
+      const pm = price.match(/(?:€|\\$|£|₹|BDT|Tk|USD)\\s?[\\d,]+/);
+      price = pm ? 'From ' + pm[0].replace(/^\\s+/, '') : '';
+      let score = clean((card.querySelector('[data-testid="review-score"]') || {}).textContent);
+      const sm = score.match(/([\\d.]+)\\s*·?\\s*(Exceptional|Excellent|Wonderful|Superb|Fabulous|Very good|Good|Pleasant|Average)/i);
+      score = sm ? sm[1] + ' · ' + sm[2] : '';
+      const meta = [price, score].filter((t) => t && t.length > 0).slice(0, 3);
+      results.push({ title: title.slice(0, 160), href, thumbnail: thumb, meta });
+    }
+    return { title: document.title, url: location.href, results };
+  })()`,
+}
+
 // --- registry -------------------------------------------------------------
 
 // Order matters: getAdapter returns the FIRST match, so specific sub-services
 // (flights) come before the domain-wide fallback (booking stays).
-const ADAPTERS: SiteAdapter[] = [bookingFlightAdapter, bookingAdapter, gozayaanAdapter]
+const ADAPTERS: SiteAdapter[] = [bookingFlightAdapter, bookingAttractionsAdapter, bookingAdapter, gozayaanAdapter]
 
 export function getAdapter(urls: Array<string | undefined | null>): SiteAdapter | null {
   const clean = urls.filter((u): u is string => typeof u === 'string' && u.length > 0)
