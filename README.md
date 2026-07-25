@@ -62,7 +62,11 @@ curl -X POST http://localhost:4545/api/v1/automations/<id>/run \
 This repo has a root `vercel.json` deploying **frontend** (Vite) and **backend** (Express) as two services in one Vercel project. Playwright still needs a real browser and a bit more memory/time than a typical serverless function, so:
 
 1. Import the repo into Vercel (`New Project` → pick this repo). It should detect both services automatically from `vercel.json`.
-2. **Add a database** — Vercel Dashboard → your project → **Storage** → **Create Database** → Postgres → **Connect** to this project. This sets `POSTGRES_URL` automatically; without it, data written on Vercel would vanish on every redeploy (no persistent disk there).
+2. **Add a database** — any Postgres works, pick one:
+   - **Vercel Postgres**: project → **Storage** → **Create Database** → Postgres → **Connect** — sets `POSTGRES_URL` for you automatically.
+   - **Supabase** (or Neon, Railway, etc.): create a free project → Project Settings → Database → Connection string → **URI** (the direct one, not the pgbouncer/pooled one) → paste it into `POSTGRES_URL` under Vercel's Project Settings → Environment Variables yourself.
+
+   Without one of these, data written on Vercel vanishes on every redeploy (no persistent disk there) — same code either way, it's just a connection string.
 3. Set **`CRED_ENCRYPTION_KEY`** in Project Settings → Environment Variables (generate with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`). Required once a database is attached — without it, saved login credentials / email configs become undecryptable after any restart.
 4. Optionally set `DEEPSEEK_API_KEY` and `VITE_API_BASE` (defaults to same-origin `/api`, which the rewrites already handle).
 5. Deploy.
