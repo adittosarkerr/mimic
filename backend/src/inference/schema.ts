@@ -108,6 +108,49 @@ function findContextRefDate(events: RecordedEvent[]): string | null {
   return null
 }
 
+/**
+ * Pull EVERY "<month> <day>" occurrence out of a string, in order. Used to read
+ * a full date-range summary ("Select dates Wed, Jul 29 — Mon, Aug 17 Select
+ * occupancy…") in one shot, rather than resolving check-in/check-out from
+ * separate single-date guesses.
+ */
+function parseAllDatesInLabel(text: string | null, contextYear: number): string[] {
+  if (!text) return []
+  const src = text.toLowerCase()
+  const re = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?,?\s+(\d{1,2})\b/g
+  const out: string[] = []
+  let m: RegExpExecArray | null
+  while ((m = re.exec(src))) {
+    const month = MONTHS[m[1]]
+    const day = parseInt(m[2], 10)
+    if (day < 1 || day > 31) continue
+    const tail = src.slice(m.index, m.index + 40)
+    const yearMatch = tail.match(/\b(20\d{2})\b/)
+    const year = yearMatch ? parseInt(yearMatch[1], 10) : contextYear
+    out.push(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`)
+  }
+  return out
+}
+
+/**
+ * Scan ALL events (not just clicks — a "Select dates Jul 29 — Aug 17" summary
+ * is often only captured as part of a SUBMIT event's textContent, e.g. Booking's
+ * form-region aria snapshot) for a string naming two full dates. Returns them in
+ * the order they appear (check-in first, check-out second) — the reliable way
+ * to resolve a cross-month calendar range, vs. guessing a month offset between
+ * two bare day-of-month cells.
+ */
+function findContextDateRange(events: RecordedEvent[]): string[] | null {
+  for (const e of events) {
+    const year = new Date(e.timestamp || Date.now()).getFullYear()
+    for (const src of [e.selector.textContent, e.selector.ariaLabel, e.selector.labelText]) {
+      const dates = parseAllDatesInLabel(src, year)
+      if (dates.length >= 2) return dates
+    }
+  }
+  return null
+}
+
 const CHOICE_ROLES = new Set(['option', 'gridcell', 'cell', 'tab', 'radio', 'menuitem', 'td', 'listitem'])
 
 /** Plain action buttons — clicking these is navigation, never a changeable preference */
@@ -377,6 +420,26 @@ function cleanDateChoices(
   const strong = vars.find((v) => v.type === 'date' && v.dateStrong && v.sampleValue)
   const refDate = strong?.sampleValue ?? contextRefDate // YYYY-MM-DD
   const refTableOrdinal = strong ? calendarTableOrdinal(events[strong.eventIndex]?.selector.css) : null
+
+  // Prefer resolving bare day-of-month cells ("29", "17") straight from a full
+  // date-RANGE summary when one exists, in click order (check-in cell clicked
+  // first, check-out second) — sidesteps the fragile single-reference +
+  // calendar-grid-offset guess below, which breaks whenever no individually
+  // aria-labeled "strong" date exists (e.g. the range text only appears on the
+  // form's SUBMIT event, not on either day-cell's own click).
+  if (!strong) {
+    const bareNumberVars = dateVars.filter((v) => v.kind === 'choice' && /^\d{1,2}$/.test(v.sampleValue ?? ''))
+    if (bareNumberVars.length >= 2) {
+      const range = findContextDateRange(events)
+      if (range && range.length >= bareNumberVars.length) {
+        bareNumberVars.forEach((v, idx) => {
+          v.type = 'date'
+          v.sampleValue = range[idx]
+          v.dateStrong = true
+        })
+      }
+    }
+  }
 
   const drop = new Set<VariableField>()
   for (const v of vars) {

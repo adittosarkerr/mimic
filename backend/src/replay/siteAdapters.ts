@@ -119,6 +119,34 @@ function pickValue(
   return null
 }
 
+/**
+ * Origin/destination, with a positional fallback. Some sites (Kayak's flight
+ * widget) give their From/To suggestion tiles no aria-label, role, or text hint
+ * at all — the recorder can only fall back to a generic "choice 1"/"choice 2"
+ * name for them. When neither field resolves by name, assume the recorded
+ * click ORDER matches the form layout (From clicked before To — how every
+ * two-box flight search works) and use the first two unresolved location-choice
+ * fields positionally, rather than failing the whole adapter and dropping to
+ * fragile generic replay.
+ */
+function pickOriginDestination(
+  schema: AutomationSchema,
+  values: Record<string, string>,
+): { origin: string | null; destination: string | null } {
+  let origin = pickValue(schema, values, (s) => /^from$|origin|leav|source|depart.*from/i.test(s))
+  let destination = pickValue(schema, values, (s) => /^to$|destinat|going|arriv/i.test(s))
+  if (!origin && !destination) {
+    const ambiguous = schema.variables
+      .filter((v) => v.kind === 'choice' && v.type === 'text')
+      .sort((a, b) => a.eventIndex - b.eventIndex)
+    if (ambiguous.length >= 2) {
+      origin = resolved(ambiguous[0], values).trim() || null
+      destination = resolved(ambiguous[1], values).trim() || null
+    }
+  }
+  return { origin, destination }
+}
+
 // --- booking.com (hotels) -------------------------------------------------
 
 /**
@@ -311,8 +339,7 @@ const gozayaanAdapter: SiteAdapter = {
   matches: (urls) =>
     urls.some((u) => /gozayaan\.com/i.test(u)) && !urls.some((u) => /gozayaan\.com\/(hotel|tour|visa)/i.test(u)),
   build(schema, values) {
-    const originRaw = pickValue(schema, values, (s) => /^from$|origin|leav|source|depart.*from/i.test(s))
-    const destRaw = pickValue(schema, values, (s) => /^to$|destinat|going|arriv/i.test(s))
+    const { origin: originRaw, destination: destRaw } = pickOriginDestination(schema, values)
     const origin = toIata(originRaw ?? '')
     const destination = toIata(destRaw ?? '')
     // Can't resolve both airports → let generic replay try instead.
@@ -383,8 +410,9 @@ const bookingFlightAdapter: SiteAdapter = {
   build(schema, values) {
     // The flights form is often mislabeled by synthesis (e.g. "Check-in" for a
     // departure), so match origin/destination + dates by every plausible name.
-    const origin = toIata(pickValue(schema, values, (s) => /^from$|origin|leav|source|depart.*from/i.test(s)) ?? '')
-    const destination = toIata(pickValue(schema, values, (s) => /^to$|destinat|going|arriv/i.test(s)) ?? '')
+    const { origin: originRaw, destination: destRaw } = pickOriginDestination(schema, values)
+    const origin = toIata(originRaw ?? '')
+    const destination = toIata(destRaw ?? '')
     if (!origin || !destination) return null
 
     const dates = pickDates(schema, values)
