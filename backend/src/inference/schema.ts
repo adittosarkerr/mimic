@@ -140,6 +140,27 @@ function parseAllDatesInLabel(text: string | null, contextYear: number): string[
  * to resolve a cross-month calendar range, vs. guessing a month offset between
  * two bare day-of-month cells.
  */
+/**
+ * Every ISO date appearing in any URL the recording touched, in order. After a
+ * search submits, the site puts the dates it actually used into the results URL
+ * (Booking's "checkin=2026-07-29", GoZayaan's "trips=CGP,ZYL,2026-07-22,..."),
+ * which is the most authoritative record of what the user picked — far better
+ * than inferring a month for a bare day-of-month calendar cell. Some pickers
+ * (GoZayaan) render day cells with no aria-label, no data-date and no visible
+ * month anywhere, so this is the ONLY place their real dates survive.
+ */
+function findDatesInUrls(events: RecordedEvent[]): string[] {
+  const out: string[] = []
+  for (const e of events) {
+    const re = /(20\d{2}-\d{2}-\d{2})/g
+    let m: RegExpExecArray | null
+    while ((m = re.exec(e.url ?? ''))) {
+      if (!out.includes(m[1])) out.push(m[1])
+    }
+  }
+  return out
+}
+
 function findContextDateRange(events: RecordedEvent[]): string[] | null {
   for (const e of events) {
     const year = new Date(e.timestamp || Date.now()).getFullYear()
@@ -414,9 +435,16 @@ export function detectVariablesHeuristic(events: RecordedEvent[]): VariableField
       } as VariableField & { dateStrong?: boolean })
     }
   })
-  return renameJourneyDates(
-    dropDuplicateLocationChoices(
-      dedupeSameField(splitOccupancy(cleanDateChoices(mergeTypedAutocomplete(vars, events), events, contextRefDate)), events),
+  // uniqueNames last: two clicks can legitimately share a label (a site with
+  // several unlabelled location boxes yields three "destination" fields), and
+  // duplicate names collide in the values map — the form renders repeated rows
+  // that overwrite each other. The LLM paths already do this; the heuristic
+  // path did not.
+  return uniqueNames(
+    renameJourneyDates(
+      dropDuplicateLocationChoices(
+        dedupeSameField(splitOccupancy(cleanDateChoices(mergeTypedAutocomplete(vars, events), events, contextRefDate)), events),
+      ),
     ),
   )
 }
@@ -592,6 +620,26 @@ function cleanDateChoices(
           v.sampleValue = range[idx]
           v.dateStrong = true
         })
+      }
+    }
+    // Still unresolved? Recover from the dates the SITE ITSELF put in the
+    // results URL after the search ran, matching each bare cell to the URL date
+    // sharing its day-of-month. Some calendars (GoZayaan) give day cells no
+    // aria-label, no data-date and no visible month, so the URL is the only
+    // surviving record — without this those clicks stay junk "21"/"16" text
+    // fields and the run silently falls back to a default departure date.
+    const stillBare = vars.filter((v) => v.kind === 'choice' && /^\d{1,2}$/.test(v.sampleValue ?? ''))
+    if (stillBare.length > 0) {
+      const urlDates = findDatesInUrls(events)
+      const used = new Set<string>()
+      for (const v of stillBare) {
+        const day = parseInt(v.sampleValue!, 10)
+        const hit = urlDates.find((iso) => !used.has(iso) && parseInt(iso.slice(8, 10), 10) === day)
+        if (!hit) continue
+        used.add(hit)
+        v.type = 'date'
+        v.sampleValue = hit
+        v.dateStrong = true
       }
     }
   }

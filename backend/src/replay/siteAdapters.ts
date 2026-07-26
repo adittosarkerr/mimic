@@ -348,9 +348,12 @@ const gozayaanAdapter: SiteAdapter = {
     // Departure vs return by field name (robust); never let a stale past date
     // become the departure. If departure is missing/past, default to a week out
     // so the adapter always builds a valid future search (no broken replay).
+    // Include check-in/check-out: a flight recording's dates are often labelled
+    // with hotel wording when the picker gave no clearer hint, and ignoring them
+    // meant the departure silently fell back to a default a week out.
     const dates = pickDates(schema, values)
-    let departDate = pickDateVar(schema, values, (s) => /depart|onward|leav|going/i.test(s)) ?? dates.find(isFuture) ?? dates[0]
-    let returnDate = pickDateVar(schema, values, (s) => /return|inbound|back|coming/i.test(s)) ?? dates[1]
+    let departDate = pickDateVar(schema, values, (s) => /depart|check.?in|onward|leav|going/i.test(s)) ?? dates.find(isFuture) ?? dates[0]
+    let returnDate = pickDateVar(schema, values, (s) => /return|check.?out|inbound|back|coming/i.test(s)) ?? dates[1]
     if (!departDate || !isFuture(departDate)) departDate = todayISO(7)
     if (returnDate && (!isFuture(returnDate) || returnDate <= departDate)) returnDate = undefined as unknown as string
 
