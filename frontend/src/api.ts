@@ -276,10 +276,14 @@ async function json<T>(res: Response): Promise<T> {
 
 export const api = {
   listRecordings: () => fetch(`${BASE}/recordings`).then((r) => json<RecordingSummary[]>(r)),
-  listAutomations: () => fetch(`${BASE}/automations`).then((r) => json<AutomationSchema[]>(r)),
+  // Auth header matters here: the backend scopes these to the signed-in account
+  // (listing returns only your own; analyze stamps you as the owner).
+  listAutomations: () => fetch(`${BASE}/automations`, { headers: authHeaders() }).then((r) => json<AutomationSchema[]>(r)),
   getAutomation: (id: string) => fetch(`${BASE}/automations/${id}`).then((r) => json<AutomationSchema>(r)),
   analyze: (recordingId: string) =>
-    fetch(`${BASE}/recordings/${recordingId}/analyze`, { method: 'POST' }).then((r) => json<AutomationSchema>(r)),
+    fetch(`${BASE}/recordings/${recordingId}/analyze`, { method: 'POST', headers: authHeaders() }).then((r) =>
+      json<AutomationSchema>(r),
+    ),
   run: (
     automationId: string,
     variables: Record<string, string>,
@@ -322,7 +326,7 @@ export const api = {
   listRuns: (automationId: string) =>
     fetch(`${BASE}/automations/${automationId}/runs`).then((r) => json<RunResult[]>(r)),
   deleteAutomation: (id: string) =>
-    fetch(`${BASE}/automations/${id}`, { method: 'DELETE' }).then((r) => json<{ ok: boolean }>(r)),
+    fetch(`${BASE}/automations/${id}`, { method: 'DELETE', headers: authHeaders() }).then((r) => json<{ ok: boolean }>(r)),
   deleteRecording: (id: string) =>
     fetch(`${BASE}/recordings/${id}`, { method: 'DELETE' }).then((r) => json<{ ok: boolean }>(r)),
 }

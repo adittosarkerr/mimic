@@ -51,6 +51,7 @@ api.post('/recordings/:id/analyze', async (req, res) => {
     res.status(404).json({ error: 'not found' })
     return
   }
+  const userId = await userIdFromReq(req)
   const existing = (await store.listAutomations()).find((a) => a.recordingId === rec.id)
   if (existing && !req.query.force) {
     res.json(existing)
@@ -90,6 +91,7 @@ api.post('/recordings/:id/analyze', async (req, res) => {
     description: refined.description,
     variables: introspected.variables.filter((v) => !loginIndices.has(v.eventIndex)),
     createdAt: Date.now(),
+    ...(userId ? { userId } : {}),
     startUrl: rec.events[0]?.url,
     login,
     email: detectEmailAction(rec, introspected.variables.filter((v) => !loginIndices.has(v.eventIndex))),
@@ -99,8 +101,17 @@ api.post('/recordings/:id/analyze', async (req, res) => {
   res.json(schema)
 })
 
-api.get('/automations', async (_req, res) => {
-  res.json(await store.listAutomations())
+// Only the caller's OWN automations. Previously this returned every automation
+// in the system to anybody, so a brand-new account saw (and could run, delete,
+// or list for sale on the marketplace) everyone else's work.
+api.get('/automations', async (req, res) => {
+  const userId = await userIdFromReq(req)
+  if (!userId) {
+    res.json([])
+    return
+  }
+  const all = await store.listAutomations()
+  res.json(all.filter((a) => a.userId === userId))
 })
 
 api.get('/automations/:id', async (req, res) => {
@@ -484,7 +495,20 @@ api.get('/automations/:id/runs', async (req, res) => {
   )
 })
 
+// Deleting is owner-only. An automation with no owner (created before ownership
+// existed) is treated as unclaimed and stays deletable, so old local data can
+// still be tidied up.
 api.delete('/automations/:id', async (req, res) => {
+  const userId = await userIdFromReq(req)
+  const target = await store.getAutomation(req.params.id)
+  if (!target) {
+    res.status(404).json({ error: 'not found' })
+    return
+  }
+  if (target.userId && target.userId !== userId) {
+    res.status(403).json({ error: 'not your automation' })
+    return
+  }
   await store.deleteAutomation(req.params.id)
   const runs = await store.listRuns()
   for (const r of runs.filter((r) => r.automationId === req.params.id)) {

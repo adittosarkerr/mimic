@@ -97,6 +97,14 @@ export interface AutomationSchema {
   description: string
   variables: VariableField[]
   createdAt: number
+  /**
+   * The account that created this automation, from the auth token at creation
+   * time. Absent on automations created before ownership existed — those stay
+   * unlisted (nobody's dashboard shows them) rather than retroactively
+   * assigning them to whoever happens to look, but by-id access still works so
+   * existing shared links don't break.
+   */
+  userId?: string
   /** URL the recording started at — used for the "log in to this site" action. */
   startUrl?: string
   /** Present when this is a "send email" task — offers a reliable SMTP path. */

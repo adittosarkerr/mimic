@@ -4,6 +4,7 @@ import { hashPassword, verifyPassword, makeToken, makeApiKey, maskApiKey, isVali
 import { PLANS, DEFAULT_PLAN, platformFeePct, type PlanId } from './plans.js'
 import { BILLING_ENABLED, bkash, checkCreationQuota, refreshDailyQuota } from './billing.js'
 import type { ApiKey, Listing, PublicUser, Transaction, User, PriceModel } from './types.js'
+import { store } from '../store/index.js'
 
 export const saas = Router()
 
@@ -272,6 +273,17 @@ saas.post('/marketplace', withUser, async (req, res) => {
     res.status(400).json({ error: 'automationId, title, priceModel and a positive priceBdt are required' })
     return
   }
+  // You can only sell what you own — without this check any signed-in user
+  // could list somebody else's automation and collect the payouts for it.
+  const automation = await store.getAutomation(automationId)
+  if (!automation) {
+    res.status(404).json({ error: 'automation not found' })
+    return
+  }
+  if (automation.userId !== user.id) {
+    res.status(403).json({ error: 'you can only list your own automations' })
+    return
+  }
   const listing: Listing = {
     id: makeId(),
     automationId,
@@ -351,9 +363,19 @@ saas.post('/marketplace/:id/buy', withUser, async (req, res) => {
     })
   }
 
+  // Actually deliver the goods: copy the automation into the buyer's account.
+  // Dashboards only list automations you own, so without this the buyer paid
+  // and received nothing they could see or run.
+  let deliveredId = listing.automationId
+  const source = await store.getAutomation(listing.automationId)
+  if (source) {
+    deliveredId = makeId()
+    await store.saveAutomation({ ...source, automationId: deliveredId, userId: buyer.id, createdAt: Date.now() })
+  }
+
   listing.sales += 1
   await saasStore.saveListing(listing)
-  res.json({ ok: true, automationId: listing.automationId, chargedBdt: listing.priceBdt, platformFeeBdt: fee, sellerNetBdt: net })
+  res.json({ ok: true, automationId: deliveredId, chargedBdt: listing.priceBdt, platformFeeBdt: fee, sellerNetBdt: net })
 })
 
 saas.get('/transactions', withUser, async (req, res) => {
