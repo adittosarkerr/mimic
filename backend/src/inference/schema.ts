@@ -183,16 +183,27 @@ export function parseDateLabel(aria: string | null, text: string | null, context
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
-/** Does this click look like picking an option (calendar day, dropdown item, suggestion, filter tab)? */
-function isChoiceClick(e: RecordedEvent): boolean {
+/**
+ * Does this click look like picking an option (calendar day, dropdown item,
+ * suggestion, filter tab)?
+ *
+ * `maxLen` is context-dependent on purpose. A generic page click gets a tight
+ * cap so long marketing copy ("Promotions, deals, and special offers for you")
+ * never becomes a form field. But a click landing right after the user opened a
+ * search box is a SUGGESTION, and those are legitimately longer — a recent-route
+ * chip reads "Dallas (DFW) - Los Angeles (LAX)" (32 chars). Capping those at 30
+ * silently threw the whole choice away, which is why flight forms came out with
+ * no destination field at all.
+ */
+function isChoiceClick(e: RecordedEvent, maxLen = 30): boolean {
   if (e.type !== 'click') return false
   const text = e.selector.textContent?.trim() ?? ''
-  if (!text || text.length < 1 || text.length > 30) return false
+  if (!text || text.length < 1 || text.length > maxLen) return false
   if (ACTION_WORDS.has(text.toLowerCase())) return false
   const role = (e.selector.role ?? '').toLowerCase()
   const numeric = /^\d{1,3}$/.test(text)
   const dateLike = /^\d{1,2}[\s/-]|\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/i.test(text)
-  const shortLabel = text.length <= 30 && /^[\w\s.,'’&()-]+$/.test(text)
+  const shortLabel = text.length <= maxLen && /^[\w\s.,'’&()-]+$/.test(text)
   return CHOICE_ROLES.has(role) || numeric || dateLike || shortLabel
 }
 
@@ -202,6 +213,37 @@ function isSearchBoxOpener(e: RecordedEvent): boolean {
   const role = (e.selector.role ?? '').toLowerCase()
   const hint = `${e.selector.ariaLabel ?? ''} ${e.selector.labelText ?? ''}`
   return role === 'combobox' || role === 'searchbox' || /destination|where|going|location|search/i.test(hint)
+}
+
+/**
+ * Which side of a two-box journey search this input represents. Flight/car forms
+ * label their boxes explicitly ("Origin location" / "From?" vs "Destination
+ * location" / "To?"), so a suggestion clicked right after opening one can be
+ * named for the box it fills instead of a meaningless "choice 2". The site
+ * adapters match origin/destination BY NAME, so getting this right is what lets
+ * a flight search build a real URL rather than falling back to fragile replay.
+ */
+function openerFieldRole(e: RecordedEvent | undefined): 'origin' | 'destination' | null {
+  if (!e) return null
+  const hint = `${e.selector.ariaLabel ?? ''} ${e.selector.labelText ?? ''} ${e.selector.placeholder ?? ''}`.toLowerCase()
+  if (/\borigin\b|\bfrom\b|from\?|leaving|pick.?up/.test(hint)) return 'origin'
+  if (/\bdestination\b|\bto\b|to\?|going|arrival|drop.?off/.test(hint)) return 'destination'
+  return null
+}
+
+/**
+ * A single "recent search" chip can name BOTH ends of a journey — "Dallas (DFW)
+ * - Los Angeles (LAX)". Clicking it fills origin and destination at once, so it
+ * must become two fields, not one. Requires whitespace around the dash so real
+ * hyphenated place names ("Stratford-upon-Avon", "Cox's Bazar-2") never split.
+ */
+function splitRoutePair(text: string): [string, string] | null {
+  const m = text.match(/^(.{2,28}?)\s+[-–—]\s+(.{2,28})$/)
+  if (!m) return null
+  const [, a, b] = m
+  // Both halves must read like place names, not a sentence fragment or a range.
+  if (!/[a-z]/i.test(a) || !/[a-z]/i.test(b)) return null
+  return [a.trim(), b.trim()]
 }
 
 /**
@@ -303,7 +345,13 @@ export function detectVariablesHeuristic(events: RecordedEvent[]): VariableField
       return
     }
 
-    if (isChoiceClick(e)) {
+    // A click landing straight after a search box was opened is a suggestion, so
+    // it earns a longer text allowance than an arbitrary page click (see
+    // isChoiceClick) — recent-route chips are longer than a plain city name.
+    const prevEvt = events[i - 1]
+    const openedBox = prevEvt != null && isSearchBoxOpener(prevEvt)
+
+    if (isChoiceClick(e, openedBox ? 60 : 30)) {
       const text = e.selector.textContent!.trim()
       const label = e.selector.labelText?.trim() ?? ''
       // A destination/location tile right after opening a search box often has a
@@ -311,8 +359,7 @@ export function detectVariablesHeuristic(events: RecordedEvent[]): VariableField
       // primary name ("Bangkok"), textContent can land on a child subtitle
       // ("Thailand") — using text unconditionally produced the wrong value. When
       // this follows a search-box opener and the two differ, trust the label.
-      const prev = events[i - 1]
-      const afterOpener = prev != null && isSearchBoxOpener(prev)
+      const afterOpener = openedBox
       const useLabelAsValue = afterOpener && label && norm(label) !== norm(text)
       const rawLabel = e.selector.ariaLabel || (afterOpener ? 'Destination' : label) || `choice ${vars.length + 1}`
       // Destination tiles concatenate sibling text with no space ("KualaLumpur",
@@ -323,9 +370,40 @@ export function detectVariablesHeuristic(events: RecordedEvent[]): VariableField
       // Aria-resolved dates are reliable; text-only ("Wed, Jul 22") are weak guesses.
       const isoFromAria = parseDateLabel(e.selector.ariaLabel, null, contextYear)
       const iso = isoFromAria ?? parseDateLabel(null, value, contextYear)
+
+      // One chip naming BOTH ends of a journey ("Dallas (DFW) - Los Angeles
+      // (LAX)") fills origin and destination at once — emit both fields so the
+      // form is complete and the flight adapter can resolve a real route.
+      const routePair = !iso && afterOpener ? splitRoutePair(value) : null
+      if (routePair) {
+        const [from, to] = routePair
+        for (const [side, sideValue] of [['origin', from], ['destination', to]] as const) {
+          vars.push({
+            name: side,
+            label: side === 'origin' ? 'From' : 'To',
+            type: 'text',
+            kind: 'choice',
+            eventIndex: i,
+            sampleValue: sideValue,
+            required: true,
+            autocomplete: true,
+          })
+        }
+        return
+      }
+
+      // Name a suggestion after the box it fills ("Origin location" → origin),
+      // so journey forms read correctly and adapters can match by name. Dates
+      // are exempt: they're renamed to check-in/check-out by actual value later.
+      const side = iso ? null : openerFieldRole(prevEvt)
+      const fallbackName = rawLabel.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
       vars.push({
-        name: (afterOpener ? 'destination' : rawLabel.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')).slice(0, 40) || `choice_${vars.length + 1}`,
-        label: rawLabel.slice(0, 60),
+        name: (side ?? (afterOpener ? 'destination' : fallbackName)).slice(0, 40) || `choice_${vars.length + 1}`,
+        // Only an origin box needs relabelling — rawLabel's fallback is the word
+        // "Destination", which is plainly wrong for a "From" field. Everything
+        // else keeps the label it already had (a hotel's destination box must
+        // stay "Destination", not become a journey-style "To").
+        label: side === 'origin' ? 'From' : rawLabel.slice(0, 60),
         type: iso ? 'date' : 'text',
         kind: 'choice',
         eventIndex: i,
@@ -336,7 +414,84 @@ export function detectVariablesHeuristic(events: RecordedEvent[]): VariableField
       } as VariableField & { dateStrong?: boolean })
     }
   })
-  return dedupeSameField(splitOccupancy(cleanDateChoices(vars, events, contextRefDate)), events)
+  return renameJourneyDates(
+    dropDuplicateLocationChoices(
+      dedupeSameField(splitOccupancy(cleanDateChoices(mergeTypedAutocomplete(vars, events), events, contextRefDate)), events),
+    ),
+  )
+}
+
+/**
+ * Collapse "typed into an autocomplete, then clicked a suggestion" into ONE
+ * field. The recording captures both halves separately, so a car-hire pick-up
+ * came out as two junk fields — a half-typed "Dala" AND a "Dalaman Airport
+ * (DLM)" choice — neither of which reads as the single location box the user
+ * actually filled.
+ *
+ * Keeps the TYPED field's identity (its label is the real one — "Pick-up
+ * location") and its eventIndex (replay must type into the box, not click a
+ * suggestion that isn't rendered yet), but takes the SUGGESTION's value, since
+ * that's the resolved, complete place name rather than a partial prefix.
+ */
+function mergeTypedAutocomplete(vars: VariableField[], events: RecordedEvent[]): VariableField[] {
+  const drop = new Set<number>()
+  for (let a = 0; a < vars.length; a++) {
+    const typed = vars[a]
+    if (typed.kind !== 'input' || typed.type !== 'text' || !typed.sampleValue) continue
+    const next = vars[a + 1]
+    if (!next || next.kind !== 'choice' || next.type !== 'text' || !next.sampleValue) continue
+    // Must be the same interaction: the suggestion click follows the typing
+    // within a couple of events, not some unrelated later choice.
+    if (next.eventIndex <= typed.eventIndex || next.eventIndex - typed.eventIndex > 2) continue
+
+    const prefix = norm(typed.sampleValue)
+    const suggestionLabel = events[next.eventIndex]?.selector.labelText?.trim() ?? ''
+    // What was typed must actually be a prefix of what got picked — otherwise
+    // these are two genuinely different fields that merely sit next to each other.
+    if (!prefix || (!norm(next.sampleValue).startsWith(prefix) && !norm(suggestionLabel).startsWith(prefix))) continue
+
+    // Prefer the suggestion's own label ("Dalaman Airport (DLM)") over the row's
+    // descriptive text ("Dalaman, Aegean Region, Turkey") — it's the canonical
+    // name the site's own autocomplete will match on a re-run.
+    typed.sampleValue = suggestionLabel || next.sampleValue
+    typed.autocomplete = true
+    drop.add(a + 1)
+  }
+  return vars.filter((_, i) => !drop.has(i))
+}
+
+/**
+ * On a journey search (an explicit origin AND destination, no rooms/guests),
+ * hotel wording is just wrong — a flight has a departure and a return, not a
+ * check-in and a check-out. Purely presentational, but "no clear form" is a real
+ * usability complaint. Names stay adapter-compatible: every flight adapter
+ * already matches departure via /depart/ and return via /return/.
+ */
+function renameJourneyDates(vars: VariableField[]): VariableField[] {
+  const isJourney =
+    vars.some((v) => v.name === 'origin') &&
+    vars.some((v) => v.name === 'destination') &&
+    !vars.some((v) => v.kind === 'guests')
+  if (!isJourney) return vars
+  return vars.map((v) =>
+    v.name === 'check_in_date' ? { ...v, name: 'departure_date', label: 'Departure date' }
+    : v.name === 'check_out_date' ? { ...v, name: 'return_date', label: 'Return date' }
+    : v,
+  )
+}
+
+/**
+ * Drop an unnamed "choice_N" location that merely repeats a value already held
+ * by a properly-named field. Clicking a recent-search chip can register both a
+ * bare city click and the full route chip; without this the form shows the
+ * origin twice, once under a meaningless label.
+ */
+function dropDuplicateLocationChoices(vars: VariableField[]): VariableField[] {
+  const named = vars.filter((v) => v.type === 'text' && !/^choice_\d+$/.test(v.name))
+  return vars.filter((v) => {
+    if (!/^choice_\d+$/.test(v.name) || v.type !== 'text' || !v.sampleValue) return true
+    return !named.some((n) => n.sampleValue && norm(n.sampleValue) === norm(v.sampleValue!))
+  })
 }
 
 /**

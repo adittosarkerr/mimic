@@ -163,11 +163,18 @@ async function selectAutocomplete(frame: Frame, input: Locator, value: string): 
     }
     return out
   }
-  const rank = (ms: Match[]) =>
-    ms.find((m) => m.title === wanted) ??
-    ms.find((m) => m.title.startsWith(wanted) && m.title.length <= wanted.length + 2) ??
-    ms.find((m) => m.title.startsWith(wanted)) ??
-    [...ms].sort((a, b) => a.title.length - b.title.length)[0]
+  // Take the site's OWN top-ranked match. collect() has already filtered to
+  // options that genuinely correspond to the typed text, so the remaining
+  // ordering is the site's relevance ranking — better than any guess we make.
+  //
+  // Deliberately NOT preferring an exact string match: typing "Miami" makes the
+  // bare city "Miami" an exact hit, but many searches (car hire, taxis) can't
+  // resolve a bare city to an internal location id and silently run with an
+  // empty location. The site's first suggestion — "Miami International Airport
+  // (MIA)" — is the entry that actually resolves, and is what a person clicks.
+  // Safe against the old reordering bug because the caller waits for the list to
+  // settle and then clicks by TEXT, never by index.
+  const rank = (ms: Match[]) => ms[0]
 
   // Suggestions STREAM in and the list reorders — ranking against a snapshot
   // and then clicking by index lands on whatever moved there (the airport bug).
@@ -185,16 +192,55 @@ async function selectAutocomplete(frame: Frame, input: Locator, value: string): 
     prevSig = sig
     await frame.page().waitForTimeout(450)
   }
+  /**
+   * Click an option and CONFIRM the site actually took it. A click that lands on
+   * a non-interactive child of the row, or arrives just as the list re-renders,
+   * silently leaves the field unresolved — the search then runs with an empty
+   * location and returns nothing useful. When the input doesn't reflect the
+   * pick, commit it by keyboard instead, which every real combobox honours.
+   */
+  const commitPick = async (target: Locator, expect: string): Promise<void> => {
+    await target.click({ timeout: 3000 }).catch(() => {})
+    await frame.page().waitForTimeout(500)
+    const after = normalize((await input.inputValue().catch(() => '')) || '')
+    const want = normalize(expect).slice(0, 6)
+    if (want && after.includes(want)) return
+    console.log(`[mimic autocomplete] click did not commit "${expect}" (box="${after}") — selecting by keyboard`)
+    await input.press('ArrowDown').catch(() => {})
+    await frame.page().waitForTimeout(200)
+    await input.press('Enter').catch(() => {})
+    await frame.page().waitForTimeout(400)
+  }
+
   if (stable && stable.length > 0) {
     const best = rank(stable)
     console.log(`[mimic autocomplete] wanted="${wanted}" picked="${best.rawTitle}" of`, stable.map((m) => m.title).slice(0, 6))
     // Click by text so a late reorder can't redirect the click.
     const target = options.filter({ hasText: best.rawTitle }).first()
-    await target.click({ timeout: 3000 }).catch(() => {})
-    await frame.page().waitForTimeout(400)
+    await commitPick(target, best.rawTitle)
     return
   }
-  // No matching suggestion after the text is confirmed in the box — search it.
+  // Nothing matched what was typed. This is the common "Miami" vs "Miami
+  // International Airport (MIA)" case: the site only accepts a resolved entry
+  // from its dropdown, so pressing Enter on a loosely-typed value either
+  // searches nothing or silently keeps a stale selection. Take the site's own
+  // top suggestion instead — it's what a person would click, and it guarantees
+  // the field ends up holding a real, resolved place.
+  const firstVisible = await (async () => {
+    const count = Math.min(await options.count().catch(() => 0), 12)
+    for (let k = 0; k < count; k++) {
+      const opt = options.nth(k)
+      if (await opt.isVisible().catch(() => false)) return opt
+    }
+    return null
+  })()
+  if (firstVisible) {
+    const picked = ((await firstVisible.innerText().catch(() => '')) || '').split('\n')[0].trim()
+    console.log(`[mimic autocomplete] no match for "${wanted}" — taking first suggestion "${picked}"`)
+    await commitPick(firstVisible, picked)
+    return
+  }
+  // Genuinely no dropdown at all — fall back to submitting the typed text.
   await input.press('Enter').catch(() => {})
 }
 
@@ -306,15 +352,39 @@ async function locateDateCell(frame: Frame, iso: string): Promise<Locator | null
   if (found) return found
   // Target month may be in the future — click the calendar's "next month" arrow
   // until the date shows (or we give up). Booking/most pickers show 2 months.
-  const nextBtn = frame
-    .locator(
-      'button[aria-label*="Next month" i], button[aria-label*="Next" i], [data-testid*="next" i], [aria-label*="next" i][role="button"]',
-    )
-    .first()
+  // Month-paging controls are labelled inconsistently across sites — Booking's
+  // car-hire calendar says "Following months", not "Next". Missing the button
+  // meant the calendar never advanced, so any date beyond the two months shown
+  // on open was reported as "not found in calendar".
+  // Taking .first() of a COMBINED selector picked whatever sat earliest in the
+  // DOM — on Booking that's a hidden carousel arrow elsewhere on the page, and
+  // its invisibility aborted paging on the first iteration. Try labels in
+  // priority order instead and take the first genuinely VISIBLE control.
+  const nextMonthSelectors = [
+    '[aria-label*="Following month" i]',
+    'button[aria-label*="Next month" i]',
+    '[aria-label*="Next month" i]',
+    '[data-testid*="datepicker-next" i]',
+    '[data-testid*="calendar-next" i]',
+    'button[aria-label*="forward" i]',
+    'button[aria-label*="Next" i]',
+  ]
+  const findNextBtn = async (): Promise<Locator | null> => {
+    for (const sel of nextMonthSelectors) {
+      const all = frame.locator(sel)
+      const n = Math.min(await all.count().catch(() => 0), 5)
+      for (let j = 0; j < n; j++) {
+        const cand = all.nth(j)
+        if (await cand.isVisible({ timeout: 300 }).catch(() => false)) return cand
+      }
+    }
+    return null
+  }
   for (let k = 0; k < 15 && !found; k++) {
-    if (!(await nextBtn.isVisible({ timeout: 400 }).catch(() => false))) break
-    await nextBtn.click({ timeout: 1200 }).catch(() => {})
-    await frame.page().waitForTimeout(300)
+    const btn = await findNextBtn()
+    if (!btn) break
+    await btn.click({ timeout: 1500 }).catch(() => {})
+    await frame.page().waitForTimeout(450)
     found = await tryFind()
   }
   return found
